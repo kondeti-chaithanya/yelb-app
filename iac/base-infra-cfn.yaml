@@ -53,6 +53,11 @@ Parameters:
     Default: "ecs/serviceconnectdemo"
     Description: CloudWatch Log Group Name
 
+  TracingLogGroup:
+    Type: String
+    Default: "ecs/serviceconnectdemo/tracing"
+    Description: CloudWatch Log Group Name for ADOT collector logs
+
 Mappings:
   # Hard values for the subnet masks. These masks define
   # the range of internal IP addresses that can be assigned.
@@ -495,6 +500,40 @@ Resources:
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 
+  YelbECSTaskTelemetryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: ecs-adot-xray
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                  - logs:DescribeLogGroups
+                  - logs:PutRetentionPolicy
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                  - xray:GetSamplingStatisticSummaries
+                  - ssm:GetParameters
+                Resource: "*"
+
   # Yelb DB Service and Task Definition
   ServiceYelbDb:
     Type: AWS::ECS::Service
@@ -621,15 +660,19 @@ Resources:
     Properties:
       Family: yelb-appserver
       NetworkMode: awsvpc
-      Cpu: "256"
-      Memory: "512"
+      Cpu: "1024"
+      Memory: "3072"
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !Ref "YelbECSTaskExecutionRole"
+      TaskRoleArn: !Ref "YelbECSTaskTelemetryRole"
       ContainerDefinitions:
         - Name: yelb-appserver
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/yelb-appserver:latest
           Essential: true
+          DependsOn:
+            - ContainerName: aws-otel-collector
+              Condition: START
           PortMappings:
             - Name: yelb-appserver
               ContainerPort: 4567
@@ -644,12 +687,29 @@ Resources:
               Value: !Sub "${YelbDbServiceName}.${YelbCloudMapDomain}"
             - Name: REDIS_SERVER_ENDPOINT
               Value: !Sub "${YelbRedisServiceName}.${YelbCloudMapDomain}"
+            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+              Value: "http://127.0.0.1:4317"
+            - Name: OTEL_EXPORTER_OTLP_PROTOCOL
+              Value: "grpc"
+            - Name: OTEL_RESOURCE_ATTRIBUTES
+              Value: "service.name=yelb-appserver"
           LogConfiguration:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref CentralLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: "yelb"
+        - Name: aws-otel-collector
+          Image: public.ecr.aws/aws-observability/aws-otel-collector:v0.30.0
+          Essential: true
+          Command:
+            - "--config=/etc/ecs/otel-instance-metrics-config.yaml"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref TracingLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "appserver-otel"
 
   # Yelb UI Service and Task Definition
   ServiceYelbUi:
@@ -687,14 +747,18 @@ Resources:
     Properties:
       Family: yelb-ui
       NetworkMode: awsvpc
-      Cpu: "256"
-      Memory: "512"
+      Cpu: "1024"
+      Memory: "3072"
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !Ref "YelbECSTaskExecutionRole"
+      TaskRoleArn: !Ref "YelbECSTaskTelemetryRole"
       ContainerDefinitions:
         - Name: yelb-ui
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/yelb-ui:latest
+          DependsOn:
+            - ContainerName: aws-otel-collector
+              Condition: START
           PortMappings:
             - Name: yelb-ui
               ContainerPort: 80
@@ -703,18 +767,41 @@ Resources:
           Environment:
             - Name: YELB_APPSERVER_ENDPOINT
               Value: !Sub "http://${YelbAppserverServiceName}.${HostedZoneDomainName}:4567"
+            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+              Value: "http://127.0.0.1:4317"
+            - Name: OTEL_EXPORTER_OTLP_PROTOCOL
+              Value: "grpc"
+            - Name: OTEL_RESOURCE_ATTRIBUTES
+              Value: "service.name=yelb-ui"
           LogConfiguration:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref CentralLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: "yelb"
+        - Name: aws-otel-collector
+          Image: public.ecr.aws/aws-observability/aws-otel-collector:v0.30.0
+          Essential: true
+          Command:
+            - "--config=/etc/ecs/otel-instance-metrics-config.yaml"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref TracingLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "ui-otel"
 
   # Cloudwatch Logs
   CloudWatchLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Ref CentralLogGroup
+      RetentionInDays: 7
+
+  TracingCloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref TracingLogGroup
       RetentionInDays: 7
 
 Outputs:

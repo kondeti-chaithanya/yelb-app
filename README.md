@@ -18,7 +18,7 @@ the minimum required AWS CLI version is `2.9.2`.
 The script accepts 4 optional arguments:
 
 1. `AWS_PROFILE`: Name of the AWS CLI profile you wish to use. If you do not provide a value `default` will be used.
-2. `AWS_DEFAULT_REGION`: Default Region where Cloud Formation Resources will be deployed. If you do not provide a value `us-west-2` will be used.
+2. `AWS_DEFAULT_REGION`: Default Region where Cloud Formation Resources will be deployed. If you do not provide a value `us-east-1` will be used.
 3. `ENVIRONMENT_NAME`: Environment Name for the Amazon ECS cluster. If you do not provide a value `ecs` will be used.
 4. `CLUSTER_NAME`: Desired Amazon ECS Cluster Name. If you do not provide a value `yelb-cluster` will be used.
 
@@ -153,6 +153,18 @@ Amazon ECS Service Connect migration complete!
 After the migration is complete, the sample application architecture will look like this:
 
 ![](images/service-connect-migration-example.png)
+
+### Application traces
+
+The CloudFormation template now deploys an AWS Distro for OpenTelemetry (ADOT)
+collector sidecar for the `yelb-ui` and `yelb-appserver` ECS tasks, plus the
+IAM permissions and log group needed to export trace data to AWS X-Ray.
+
+Important: this repository deploys prebuilt container images. The ECS changes
+make the tasks trace-ready, but application traces still depend on the
+containers themselves emitting OpenTelemetry/X-Ray spans. If you want
+end-to-end traces to appear in X-Ray, the `yelb-ui` and `yelb-appserver` images
+must include application instrumentation.
 
 ### Clean up
 
