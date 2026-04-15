@@ -648,6 +648,7 @@ Resources:
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
           Enable: false
+          Rollback: false
           
       DesiredCount: 3
       TaskDefinition: !Ref "TaskDefinitionYelbAppserver"
@@ -733,6 +734,7 @@ Resources:
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
           Enable: false
+          Rollback: false
           
       DesiredCount: 3
       TaskDefinition: !Ref "TaskDefinitionYelbUi"
