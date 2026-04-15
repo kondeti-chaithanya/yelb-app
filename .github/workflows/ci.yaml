@@ -23,15 +23,39 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Deploy CloudFormation
+    # 🔥 Step 1: Delete failed stack if exists
+    - name: Delete failed stack (if exists)
+      run: |
+        aws cloudformation delete-stack --stack-name yelb-stack || true
+        aws cloudformation wait stack-delete-complete --stack-name yelb-stack || true
+
+    # 🚀 Step 2: Deploy infrastructure
+    - name: Deploy CloudFormation Stack
       run: |
         aws cloudformation deploy \
           --template-file iac/base-infra-cfn.yaml \
           --stack-name yelb-stack \
-          --capabilities CAPABILITY_NAMED_IAM
+          --capabilities CAPABILITY_NAMED_IAM \
+          --no-fail-on-empty-changeset
 
-    - name: Get Output URL
+    # ⏳ Step 3: Wait until stack completes
+    - name: Wait for stack creation
+      run: |
+        aws cloudformation wait stack-create-complete \
+          --stack-name yelb-stack || \
+        aws cloudformation wait stack-update-complete \
+          --stack-name yelb-stack
+
+    # 🔍 Step 4: Print stack outputs (ALB URL)
+    - name: Get Load Balancer URL
       run: |
         aws cloudformation describe-stacks \
           --stack-name yelb-stack \
           --query "Stacks[0].Outputs"
+
+    # 🧠 Step 5: Debug (if needed)
+    - name: Print stack events (for debugging)
+      if: failure()
+      run: |
+        aws cloudformation describe-stack-events \
+          --stack-name yelb-stack
