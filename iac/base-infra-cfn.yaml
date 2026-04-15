@@ -414,9 +414,9 @@ Resources:
           Value: '20'
       TargetType: ip
       IpAddressType: ipv4
-      HealthCheckIntervalSeconds: 10  # Default is 30
+      HealthCheckIntervalSeconds: 20  # Default is 30
       HealthyThresholdCount: 2        # Default is 5
-      UnhealthyThresholdCount: 2      # Default is 2
+      UnhealthyThresholdCount: 5      # Default is 2
 
   EcsLbListener:
     Type: "AWS::ElasticLoadBalancingV2::Listener"
@@ -455,9 +455,9 @@ Resources:
       TargetType: ip
       IpAddressType: ipv4
       HealthCheckPath: "/api/getvotes"
-      HealthCheckIntervalSeconds: 10  # Default is 30
+      HealthCheckIntervalSeconds: 20  # Default is 30
       HealthyThresholdCount: 2        # Default is 5
-      UnhealthyThresholdCount: 2      # Default is 2
+      UnhealthyThresholdCount: 5      # Default is 2
 
   EcsInternalListener:
     Type: "AWS::ElasticLoadBalancingV2::Listener"
@@ -551,7 +551,7 @@ Resources:
       TaskDefinition: !Ref "TaskDefinitionYelbDb"
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets: [!Ref "PrivateSubnet1", !Ref "PrivateSubnet2"]
           SecurityGroups: [!Ref "YelbDbSecurityGroup"]
       ServiceRegistries:
@@ -647,8 +647,8 @@ Resources:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
-          Enable: true
-          Rollback: true
+          Enable: false
+          
       DesiredCount: 3
       TaskDefinition: !Ref "TaskDefinitionYelbAppserver"
       NetworkConfiguration:
@@ -732,8 +732,8 @@ Resources:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
-          Enable: true
-          Rollback: true
+          Enable: false
+          
       DesiredCount: 3
       TaskDefinition: !Ref "TaskDefinitionYelbUi"
       NetworkConfiguration:
