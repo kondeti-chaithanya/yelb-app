@@ -537,6 +537,9 @@ Resources:
   # Yelb DB Service and Task Definition
   ServiceYelbDb:
     Type: AWS::ECS::Service
+    DependsOn:
+      - NatGateway1
+      - NatGateway2
     Properties:
       ServiceName: !Ref YelbDbServiceName
       LaunchType: FARGATE
@@ -566,7 +569,7 @@ Resources:
       ExecutionRoleArn: !Ref "YelbECSTaskExecutionRole"
       ContainerDefinitions:
         - Name: yelb-db
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/yelb-db:latest
+          Image: public.ecr.aws/aws-containers/ecs-yelb-db:latest
           Cpu: 100
           Essential: true
           PortMappings:
@@ -583,6 +586,9 @@ Resources:
   # Yelb Redis Service and Task Definition
   ServiceRedisServer:
     Type: AWS::ECS::Service
+    DependsOn:
+      - NatGateway1
+      - NatGateway2
     Properties:
       ServiceName: !Ref YelbRedisServiceName
       LaunchType: FARGATE
@@ -594,7 +600,7 @@ Resources:
       TaskDefinition: !Ref "TaskDefinitionRedisServer"
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           Subnets: [!Ref "PrivateSubnet1", !Ref "PrivateSubnet2"]
           SecurityGroups: [!Ref "YelbRedisSecurityGroup"]
       ServiceRegistries:
@@ -612,7 +618,7 @@ Resources:
       ExecutionRoleArn: !Ref "YelbECSTaskExecutionRole"
       ContainerDefinitions:
         - Name: redis-server
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/redis:latest
+          Image: public.ecr.aws/aws-containers/ecs-yelb-redis:latest
           Cpu: 100
           Essential: true
           PortMappings:
@@ -668,7 +674,7 @@ Resources:
       TaskRoleArn: !Ref "YelbECSTaskTelemetryRole"
       ContainerDefinitions:
         - Name: yelb-appserver
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/yelb-appserver:latest
+          Image: public.ecr.aws/aws-containers/ecs-yelb-appserver:latest
           Essential: true
           DependsOn:
             - ContainerName: aws-otel-collector
@@ -755,7 +761,7 @@ Resources:
       TaskRoleArn: !Ref "YelbECSTaskTelemetryRole"
       ContainerDefinitions:
         - Name: yelb-ui
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/yelb-ui:latest
+          Image: public.ecr.aws/aws-containers/ecs-yelb-ui:latest
           DependsOn:
             - ContainerName: aws-otel-collector
               Condition: START

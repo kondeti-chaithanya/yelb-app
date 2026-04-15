@@ -1,4 +1,4 @@
-name: Build and Deploy Yelb App
+name: Deploy Yelb App to ECS (Prebuilt Images)
 
 on:
   push:
@@ -17,34 +17,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # ✅ Checkout code
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    # 🔐 Configure AWS (OIDC)
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
-    # 🔐 Login to ECR
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v2
-
-    # 🏗️ Build & Push yelb-ui
-    - name: Build & Push yelb-ui
+    # 🧹 Delete failed stack if exists
+    - name: Delete failed stack (if exists)
       run: |
-        docker build -t yelb-ui ./yelb-ui
-        docker tag yelb-ui:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-ui:latest
-        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-ui:latest
+        aws cloudformation delete-stack --stack-name yelb-stack || true
+        aws cloudformation wait stack-delete-complete --stack-name yelb-stack || true
 
-    # 🏗️ Build & Push appserver
-    - name: Build & Push yelb-appserver
-      run: |
-        docker build -t yelb-appserver ./yelb-appserver
-        docker tag yelb-appserver:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-appserver:latest
-        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-appserver:latest
-
-    # 🚀 Deploy CloudFormation
+    # 🚀 Deploy CloudFormation (uses prebuilt images)
     - name: Deploy CloudFormation
       run: |
         aws cloudformation deploy \
@@ -53,17 +43,24 @@ jobs:
           --capabilities CAPABILITY_NAMED_IAM \
           --no-fail-on-empty-changeset
 
-    # ⏳ Wait
-    - name: Wait for stack
+    # ⏳ Wait for stack creation/update
+    - name: Wait for stack completion
       run: |
         aws cloudformation wait stack-create-complete \
           --stack-name yelb-stack || \
         aws cloudformation wait stack-update-complete \
           --stack-name yelb-stack
 
-    # 🌐 Output URL
-    - name: Get URL
+    # 🌐 Get Load Balancer URL
+    - name: Get Application URL
       run: |
         aws cloudformation describe-stacks \
           --stack-name yelb-stack \
           --query "Stacks[0].Outputs"
+
+    # 🔍 Debug if failure
+    - name: Debug CloudFormation Events
+      if: failure()
+      run: |
+        aws cloudformation describe-stack-events \
+          --stack-name yelb-stack
