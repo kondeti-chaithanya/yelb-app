@@ -58,9 +58,4 @@ jobs:
           --stack-name yelb-stack \
           --query "Stacks[0].Outputs"
 
-    # 🔍 Debug if failure
-    - name: Debug CloudFormation Events
-      if: failure()
-      run: |
-        aws cloudformation describe-stack-events \
-          --stack-name yelb-stack
+    
