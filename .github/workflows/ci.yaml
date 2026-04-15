@@ -1,4 +1,4 @@
-name: Deploy Yelb App to ECS
+name: Build and Deploy Yelb App
 
 on:
   push:
@@ -9,6 +9,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: us-east-1
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,20 +20,32 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials (OIDC)
+    - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
 
-    # 🔥 Step 1: Delete failed stack if exists
-    - name: Delete failed stack (if exists)
+    # 🔐 Login to ECR
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # 🏗️ Build & Push yelb-ui
+    - name: Build & Push yelb-ui
       run: |
-        aws cloudformation delete-stack --stack-name yelb-stack || true
-        aws cloudformation wait stack-delete-complete --stack-name yelb-stack || true
+        docker build -t yelb-ui ./yelb-ui
+        docker tag yelb-ui:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-ui:latest
+        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-ui:latest
 
-    # 🚀 Step 2: Deploy infrastructure
-    - name: Deploy CloudFormation Stack
+    # 🏗️ Build & Push appserver
+    - name: Build & Push yelb-appserver
+      run: |
+        docker build -t yelb-appserver ./yelb-appserver
+        docker tag yelb-appserver:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-appserver:latest
+        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/yelb-appserver:latest
+
+    # 🚀 Deploy CloudFormation
+    - name: Deploy CloudFormation
       run: |
         aws cloudformation deploy \
           --template-file iac/base-infra-cfn.yaml \
@@ -38,24 +53,17 @@ jobs:
           --capabilities CAPABILITY_NAMED_IAM \
           --no-fail-on-empty-changeset
 
-    # ⏳ Step 3: Wait until stack completes
-    - name: Wait for stack creation
+    # ⏳ Wait
+    - name: Wait for stack
       run: |
         aws cloudformation wait stack-create-complete \
           --stack-name yelb-stack || \
         aws cloudformation wait stack-update-complete \
           --stack-name yelb-stack
 
-    # 🔍 Step 4: Print stack outputs (ALB URL)
-    - name: Get Load Balancer URL
+    # 🌐 Output URL
+    - name: Get URL
       run: |
         aws cloudformation describe-stacks \
           --stack-name yelb-stack \
           --query "Stacks[0].Outputs"
-
-    # 🧠 Step 5: Debug (if needed)
-    - name: Print stack events (for debugging)
-      if: failure()
-      run: |
-        aws cloudformation describe-stack-events \
-          --stack-name yelb-stack
